@@ -362,7 +362,7 @@ new String:g_szClantag[MAXPLAYERS+1][32];
 
 public Plugin:myinfo =  {
 	name = "RankMe", 
-	author = "lok1, Scooby, pracc, Kento, Kxnrl", 
+	author = "lok1, Scooby, pracc, Kento, Kxnrl, de_nerd", 
 	description = "Improved RankMe for CSGO", 
 	version = PLUGIN_VERSION, 
 	url = "https://github.com/rogeraabbccdd/Kento-Rankme"
@@ -552,6 +552,8 @@ public OnPluginStart() {
 	RegConsoleCmd("sm_weaponme", CMD_WeaponMe, "RankMe: Shows the kills with each weapon");
 	RegConsoleCmd("sm_resetmyrank", CMD_ResetOwnRank, "RankMe: Resets your own rank");
 	RegConsoleCmd("sm_statsme", CMD_StatsMe, "RankMe: Shows your stats");
+	RegConsoleCmd("sm_stats", CMD_Stats, "RankMe: Show someones stats");
+
 	RegConsoleCmd("sm_next", CMD_Next, "RankMe: Shows the next 9 players above you on the TOP");
 	RegConsoleCmd("sm_statsme2", CMD_StatsMe2, "RankMe: Shows the stats from a player");
 	RegConsoleCmd("sm_rankme", CMD_RankMe, "RankMe: Shows a menu with the basic commands");

@@ -1601,6 +1601,179 @@ public Action:CMD_WeaponMe(client,args){
 	DisplayMenu(panel,client,MENU_TIME_FOREVER);
 	return Plugin_Handled;
 }
+//de_nerd
+public Action:CMD_Stats(client, args) {
+	new String:nameSegment[64];
+	new String:name[MAX_NAME_LENGTH];
+
+	GetCmdArg(1,nameSegment,sizeof(nameSegment));
+
+	if(strlen(nameSegment) == 0) {
+		CMD_StatsMe(client, args);
+		return Plugin_Handled;
+	}
+
+	for(new i=1;i<=MaxClients;i++) {
+
+
+		if(IsClientInGame(i)) { 
+			GetClientName(i,name,sizeof(name));
+			
+			if(StrContains(name,nameSegment,false) != -1) {
+					if(!g_bEnabled || client == 0 || !IsClientInGame(client))
+						return Plugin_Handled;
+					new String:query[2000];
+					MakeSelectQuery(query,sizeof(query));
+					if(g_RankMode == 1)
+						Format(query,sizeof(query),"%s ORDER BY score DESC",query);
+					else if(g_RankMode == 2){
+						if(g_bMysql)
+							Format(query,sizeof(query),"%s ORDER BY CAST(kills as DECIMAL)/CAST(Case when deaths=0 then 1 ELSE deaths END as DECIMAL) DESC, score DESC",query);
+						else
+							Format(query,sizeof(query),"%s ORDER BY CAST(kills as float)/CAST(Case when deaths=0 then 1 ELSE deaths END as float) DESC, score DESC",query);
+					}	
+					
+					DataPack clientPack = new DataPack();
+					clientPack.WriteCell(i);
+					clientPack.WriteCell(client);
+
+					SQL_TQuery(g_hStatsDb,SQL_StatsCallback, query, clientPack);
+					break;
+			}
+		}
+	}
+	
+	return Plugin_Handled;
+}
+
+public SQL_StatsCallback(Handle:owner, Handle:hndl, const String:error[], DataPack:pack){
+	pack.Reset();
+	new client = pack.ReadCell();
+	new menuClient = pack.ReadCell();
+
+
+	if(hndl == INVALID_HANDLE)
+	{
+		LogError("[RankMe] Query Fail: %s", error);
+		return;
+	}
+	if(client == 0 || !IsClientInGame(client))
+		return;
+	new i;
+	
+	g_TotalPlayers =SQL_GetRowCount(hndl);
+	new String:Auth_receive[64];
+	new String:Name_receive[MAX_NAME_LENGTH];
+	new String:Ip_receive[64];
+	if(g_aStats[client][KILLS] >= g_MinimalKills){
+		
+		while(SQL_HasResultSet(hndl) && SQL_FetchRow(hndl))
+		{
+			i++;
+			SQL_FetchString(hndl,1,Auth_receive,64);
+			
+			SQL_FetchString(hndl,2,Name_receive,MAX_NAME_LENGTH);
+			
+			SQL_FetchString(hndl,3,Ip_receive,64);
+			
+			if((g_RankBy == 1 && StrEqual(g_aClientName[client],Name_receive)) || (g_RankBy == 0 && StrEqual(Auth_receive,g_aClientSteam[client],false)) || (g_RankBy == 2 && StrEqual(Ip_receive,g_aClientIp[client],false)))
+				break;
+		}
+	} else {
+		i = 0;
+	}
+	new Handle:panel = CreateMenuEx(_,MenuHandler_DoNothing,MENU_ACTIONS_ALL);
+	new String:text[255];
+	SetMenuPagination(panel,3);
+	new ikills = g_aStats[client][KILLS];
+	new ideaths=g_aStats[client][DEATHS];
+	new deaths;
+	if(ideaths == 0)
+		deaths = 1;
+	else 
+		deaths=ideaths;
+	new Float:kills = IntToFloat(ikills);
+	new shots;
+	if(g_aStats[client][SHOTS] == 0)
+		shots = 1;
+	else
+		shots = g_aStats[client][SHOTS];
+	
+	new rounds = g_aStats[client][ROUNDS_TR] + g_aStats[client][ROUNDS_CT];
+	if((g_aStats[client][ROUNDS_TR] ==0) && (g_aStats[client][ROUNDS_CT] == 0))
+	{
+		rounds = 1;
+	}
+	
+	new idamage = g_aStats[client][DAMAGE];
+	new Float:damage = IntToFloat(idamage);
+
+	new String:temp[255];
+	new String:statsPlayer[32];
+	GetClientName(client, statsPlayer, 32);
+	Format(temp,sizeof(temp),"- %T of player: %s \n","BasicStats",client, statsPlayer);
+	StrCat(text,255,temp);
+	if(i == 0)
+		Format(temp,sizeof(temp),"%T: %i [%i]\n","Points",client,g_aStats[client][SCORE],g_aSession[client][SCORE]);
+	else
+		Format(temp,sizeof(temp),"Rank: %i/%i   %T: %i [%i]\n",i,SQL_GetRowCount(hndl),"Points",client,g_aStats[client][SCORE],g_aSession[client][SCORE]);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T   KDR: %.2f\n","KillsDeathsAssists",client,ikills,ideaths,g_aStats[client][ASSISTS],kills/deaths);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d  %T: %d  %T: %d\n","Headshots",client,g_aStats[client][HEADSHOTS],"Suicides",client,g_aStats[client][SUICIDES],"TKs",client,g_aStats[client][TK]);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d  %T: %.2f   %T: %.2f\n ","Damage", client, idamage,"KPR", client, kills/rounds, "DPR", client, damage/rounds);
+	StrCat(text,255,temp);
+	AddMenuItem(panel,"",text);
+	text="";
+	
+	Format(temp,sizeof(temp),"- %T\n","RoundStats",client);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d/%d   %T: %d/%d   %T: %d\n ","TRWins",client,g_aStats[client][TR_WIN],g_aStats[client][ROUNDS_TR],"CTWins",client,g_aStats[client][CT_WIN],g_aStats[client][ROUNDS_CT],"MVPs",client,g_aStats[client][MVP]);
+	StrCat(text,255,temp);
+	AddMenuItem(panel,"",text);
+	text="";
+	
+	Format(temp,sizeof(temp),"- %T\n","HitStats",client);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d   %T: %d   %T: %.2f%%\n ","Shots",client,shots,"Hits",client,g_aStats[client][HITS],"Accuracy",client,IntToFloat(g_aStats[client][HITS])/shots*100);
+	StrCat(text,255,temp);
+	AddMenuItem(panel,"",text);
+	text="";
+	
+	Format(temp,sizeof(temp),"- %T\n","BombHostagesStats",client);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d   %T: %d   %T: %d\n","PlantedBombs",client,g_aStats[client][C4_PLANTED],"ExplodedBombs",client,g_aStats[client][C4_EXPLODED],"DefusedBombs",client,g_aStats[client][C4_DEFUSED]);
+	StrCat(text,255,temp);
+	Format(temp,255,"%T: %d","RescuedHostages",client,g_aStats[client][HOSTAGES_RESCUED]);
+	StrCat(text,255,temp);
+	AddMenuItem(panel,"",text);
+	text="";
+				
+	if(g_bVipEnabled){
+		Format(temp,sizeof(temp),"- %T\n","VIPStats",client);
+		StrCat(text,255,temp);
+		Format(temp,255,"%T: %d/%d   %T: %d\n ","VIPEscapes",client,g_aStats[client][VIP_ESCAPED],g_aStats[client][VIP_PLAYED],"VIPsKilled",client,g_aStats[client][VIP_KILLED]);
+		StrCat(text,255,temp);
+		AddMenuItem(panel,"",text);
+		text="";
+	}
+	
+	Format(temp,sizeof(temp),"- %T\n","OtherStats",client);
+	StrCat(text,255,temp);
+	new time = g_aStats[client][CONNECTED] + GetTime()-g_aSession[client][CONNECTED];
+	new hours = RoundToFloor(time/3600.0);
+	time = time-(hours*3600);
+	
+	new minutes = RoundToFloor(time/60.0);
+	time = time-(minutes*60);
+	
+	Format(temp,255,"%T","TimeConnected",client,hours,minutes,time);
+	StrCat(text,255,temp);
+	AddMenuItem(panel,"",text);
+	text="";
+	DisplayMenu(panel,menuClient,MENU_TIME_FOREVER);
+}
 
 public Action:CMD_StatsMe(client,args){
 	if(!g_bEnabled || client == 0 || !IsClientInGame(client))
